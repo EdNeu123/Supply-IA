@@ -1,5 +1,5 @@
 import { api } from './api';
-import { RFQ, Quote, PurchaseOrder } from '@/models/types';
+import { RFQ, Quote, PurchaseOrder, Movimentacao } from '@/models/types';
 
 export const rfqService = {
   list: async (): Promise<RFQ[]> => (await api.get('/rfqs')).data,
@@ -17,4 +17,10 @@ export const purchaseOrderService = {
   create: async (data: Partial<PurchaseOrder>) => (await api.post('/purchase-orders', data)).data,
   updateStatus: async (id: string, status: string) =>
     (await api.put(`/purchase-orders/${id}/status`, { status })).data,
+};
+
+export const movimentacaoService = {
+  list: async (): Promise<Movimentacao[]> => (await api.get('/movimentacoes')).data,
+  create: async (data: { productId: string; tipo: string; quantidade: number; motivo?: string }) =>
+    (await api.post('/movimentacoes', data)).data,
 };

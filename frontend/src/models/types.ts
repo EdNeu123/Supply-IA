@@ -20,3 +20,14 @@ export interface PurchaseOrder {
   id: string; quoteId: string; productId: string; supplierId: string;
   qty: number; total: number; status: 'created' | 'sent' | 'received' | 'completed'; createdAt: string;
 }
+
+export interface Movimentacao {
+  id: string;
+  productId: string;
+  tipo: 'entrada' | 'saida';
+  quantidade: number;
+  motivo?: string;
+  estoqueAntes: number;
+  estoqueDepois: number;
+  createdAt: string;
+}

@@ -6,6 +6,7 @@ import { supplierController } from '../controllers/supplierController';
 import { rfqController } from '../controllers/rfqController';
 import { quoteController } from '../controllers/quoteController';
 import { purchaseOrderController } from '../controllers/purchaseOrderController';
+import { movimentacaoController } from '../controllers/movimentacaoController';
 
 const router = Router();
 
@@ -34,5 +35,8 @@ router.post('/quotes/simulate',  quoteController.simulate);
 router.get('/purchase-orders',              purchaseOrderController.list);
 router.post('/purchase-orders',             purchaseOrderController.create);
 router.put('/purchase-orders/:id/status',   purchaseOrderController.updateStatus);
+
+router.get('/movimentacoes',  movimentacaoController.list);
+router.post('/movimentacoes', movimentacaoController.create);
 
 export default router;

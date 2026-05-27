@@ -6,8 +6,10 @@ import { Landing } from '@/pages/Landing';
 import { Dashboard } from '@/pages/Dashboard';
 import { Produtos } from '@/pages/Produtos';
 import { Fornecedores } from '@/pages/Fornecedores';
+import { Vinculos } from '@/pages/Vinculos';
 import { Cotacoes } from '@/pages/Cotacoes';
 import { Compras } from '@/pages/Compras';
+import { Movimentacoes } from '@/pages/Movimentacoes';
 import { useAuthStore } from '@/store/authStore';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -26,6 +28,8 @@ export const AppRoutes = () => (
       <Route index element={<Dashboard />} />
       <Route path="produtos" element={<Produtos />} />
       <Route path="fornecedores" element={<Fornecedores />} />
+      <Route path="vinculos" element={<Vinculos />} />
+      <Route path="movimentacoes" element={<Movimentacoes />} />
       <Route path="cotacoes" element={<Cotacoes />} />
       <Route path="compras" element={<Compras />} />
     </Route>

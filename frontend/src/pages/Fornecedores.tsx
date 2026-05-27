@@ -129,7 +129,7 @@ export const Fornecedores = () => {
               {/* Infos */}
               <div className="text-xs text-text-2 space-y-1">
                 {s.email    && <p><span className="text-text-3">E-mail:</span> {s.email}</p>}
-                {s.whatsapp && <p><span className="text-text-3">WhatsApp:</span> {s.whatsapp}</p>}
+                {s.whatsapp && <p><span className="text-text-3">Contato:</span> {s.whatsapp}</p>}
               </div>
 
               {/* Produtos vinculados */}
@@ -192,7 +192,7 @@ export const Fornecedores = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-text-1 mb-1">WhatsApp</label>
+                <label className="block text-sm font-medium text-text-1 mb-1">Contato</label>
                 <input type="text" placeholder="+55 47 99999-9999"
                   value={form.whatsapp ?? ''} onChange={e => setForm({ ...form, whatsapp: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-text-1 focus:border-accent outline-none text-sm" />
