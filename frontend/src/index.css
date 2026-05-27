@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #FAF8F5; --surface: #FFFDF9; --surface-2: #F5F0EA;
+    --border: #E8E0D5; --border-2: #CFC4B6;
+    --text-1: #1C1714; --text-2: #7A6E65; --text-3: #A09487;
+    --accent: #028090; --accent-bg: color-mix(in srgb, #028090 10%, white);
+    --green: #16A34A; --green-bg: #DCFCE7;
+    --red: #DC2626; --red-bg: #FEE2E2;
+    --yellow: #CA8A04; --yellow-bg: #FEF9C3;
+    color-scheme: light;
+  }
+  .dark {
+    --bg: #16201F; --surface: #1E2A29; --surface-2: #192322;
+    --border: #2A3937; --border-2: #374A48;
+    --text-1: #EDF2F1; --text-2: #9FB0AD; --text-3: #7A8B88;
+    --accent: #02C39A; --accent-bg: color-mix(in srgb, #02C39A 15%, transparent);
+    --green: #5DCAA5; --green-bg: rgba(93,202,165,0.12);
+    --red: #E8A5A5; --red-bg: rgba(232,165,165,0.12);
+    --yellow: #D4A84B; --yellow-bg: rgba(212,168,75,0.12);
+    color-scheme: dark;
+  }
+  body { @apply bg-bg text-text-1 font-sans antialiased transition-colors duration-200; }
+}
