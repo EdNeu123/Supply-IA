@@ -1,9 +1,9 @@
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, Truck, FileText, ShoppingCart, LogOut, Moon, Sun } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/config/firebase';
+import { useAuthStore } from '@/store/authStore';
 import { signOut } from 'firebase/auth';
-import { useState, useEffect } from 'react';
+import { FileText, LayoutDashboard, LogOut, Moon, Package, ShoppingCart, Sun, Truck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 const PAGE_TITLES: Record<string, string> = {
   '/app': 'Dashboard',
@@ -39,11 +39,10 @@ export const AppLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <aside className="w-64 bg-surface border-r border-border flex flex-col">
-        {/* Logo — icon + text side by side, no background issues */}
-        <div className="h-16 flex items-center gap-2.5 px-5 border-b border-border">
-          <img src="/logo-icon.png" alt="" className="h-8 w-8 object-contain"
-            style={{ mixBlendMode: 'multiply' }} />
-          <span className="text-lg font-bold text-text-1">
+        {/* Logo ajustada (maior e sem gambiarra de CSS) */}
+        <div className="h-16 flex items-center gap-3 px-5 border-b border-border">
+          <img src="/logo-icon.png" alt="Logo" className="h-10 w-auto object-contain" />
+          <span className="text-xl font-bold text-text-1">
             Supply <span className="text-accent">IA</span>
           </span>
         </div>

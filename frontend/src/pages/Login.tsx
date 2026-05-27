@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/config/firebase';
-import { useNavigate, Link } from 'react-router-dom';
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { ArrowLeft, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -68,8 +68,18 @@ export const Login = () => {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 flex items-center justify-center p-6 relative">
+        
+        {/* Botão de Voltar */}
+        <Link
+          to="/"
+          className="absolute top-6 left-6 sm:top-8 sm:left-8 flex items-center gap-2 text-sm font-medium text-text-2 hover:text-text-1 transition-colors"
+        >
+          <ArrowLeft size={18} />
+          Voltar
+        </Link>
+
+        <div className="w-full max-w-sm mt-8 lg:mt-0">
           <div className="lg:hidden flex justify-center mb-8">
             <img src="/logo.png" alt="Supply IA" className="h-10 object-contain" />
           </div>

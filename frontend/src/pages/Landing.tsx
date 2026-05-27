@@ -1,5 +1,5 @@
+import { BarChart3, Bell, BrainCircuit, CheckCircle2, ChevronRight, PackageSearch, ShieldCheck, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { PackageSearch, Zap, BrainCircuit, CheckCircle2, ChevronRight, ShieldCheck, BarChart3, Bell } from 'lucide-react';
 
 export const Landing = () => (
   <div className="min-h-screen bg-white text-gray-900 font-sans">
@@ -7,9 +7,10 @@ export const Landing = () => (
     {/* ── Header ── */}
     <header className="fixed top-0 w-full bg-white/90 backdrop-blur-md border-b border-gray-100 z-50">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <img src="/logo-icon.png" alt="" className="h-8 w-8 object-contain" style={{ mixBlendMode: 'multiply' }} />
-          <span className="text-lg font-bold text-gray-900">Supply <span className="text-teal-600">IA</span></span>
+        <div className="flex items-center gap-3">
+          {/* Logo ajustada */}
+          <img src="/logo-icon.png" alt="Logo" className="h-12 w-auto object-contain" />
+          <span className="text-xl font-bold text-gray-900">Supply <span className="text-teal-600">IA</span></span>
         </div>
         <nav className="hidden md:flex gap-8 text-sm font-medium text-gray-500">
           <a href="#como-funciona" className="hover:text-gray-900 transition-colors">Como funciona</a>
@@ -267,9 +268,10 @@ export const Landing = () => (
     {/* ── Footer ── */}
     <footer className="bg-gray-900 py-10 px-6">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <img src="/logo-icon.png" alt="" className="h-7 w-7 object-contain brightness-200" />
-          <span className="text-white font-bold">Supply IA</span>
+        <div className="flex items-center gap-3">
+          {/* Logo do Footer ajustada */}
+          <img src="/logo-icon.png" alt="Logo" className="h-8 w-auto object-contain" />
+          <span className="text-white font-bold text-lg">Supply IA</span>
         </div>
         <p className="text-gray-500 text-sm">© 2026 Supply IA. Todos os direitos reservados.</p>
         <div className="flex gap-6 text-sm text-gray-500">
