@@ -1,0 +1,61 @@
+# ── Dependências ──────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build / Output ────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+out/
+
+# ── Ambiente (NUNCA sobe pro Git) ─────────────────────────
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# ── Firebase ──────────────────────────────────────────────
+.firebase/
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+*-firebase-adminsdk-*.json
+
+# ── Vercel ────────────────────────────────────────────────
+.vercel/
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── IDEs ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Sistema Operacional ───────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── TypeScript ────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── Cache ─────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# ── Testes ────────────────────────────────────────────────
+coverage/

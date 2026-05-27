@@ -11,4 +11,9 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', message: 'Supply 
 app.use('/api', apiRoutes);
 app.use(errorHandler);
 
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Supply IA API rodando na porta ${PORT}`);
+});
+
 export default app;
