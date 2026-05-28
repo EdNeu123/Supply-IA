@@ -52,21 +52,26 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      const prompt = `
-        Você é um assistente de suprimentos interagindo com um fornecedor.
-        O sistema enviou um pedido de cotação e ele respondeu: "${text}"
+const prompt = `
+        Você é um assistente de compras de uma empresa interagindo via chat com um fornecedor.
+        O sistema enviou um pedido de cotação para ele, e ele respondeu: "${text}"
         
-        REGRA DE NEGÓCIO OBRIGATÓRIA: Uma cotação SÓ está completa se o fornecedor informar TODOS os 4 itens abaixo:
+        REGRA 1 - DÚVIDAS DO FORNECEDOR:
+        Se o fornecedor fizer uma pergunta técnica (ex: qual a marca, cor, tamanho, especificações?), responda SEMPRE de forma educada informando algo como: "Não exigimos uma marca ou especificação exata, pode cotar a melhor opção de custo-benefício que você tem disponível." 
+        IMPORTANTE: NUNCA devolva a pergunta para o fornecedor. Assuma a postura de quem está comprando.
+        
+        REGRA 2 - DADOS OBRIGATÓRIOS DA COTAÇÃO:
+        Uma cotação SÓ está completa (isQuote = true) se o fornecedor informar TODOS os 4 itens abaixo na mensagem:
         1. Preço unitário
         2. Quantidade mínima
         3. Prazo de entrega
         4. Validade da cotação (ex: quantos dias o preço é mantido)
         
-        Instruções:
-        - Se faltar QUALQUER UM dos 4 itens, isQuote = false. Agradeça o que ele já enviou e pergunte ESPECIFICAMENTE os dados que faltam de forma simpática.
-        - Se ele enviar todos os 4 itens, isQuote = true e "replyMessage" = "✅ Proposta registrada com sucesso no sistema! Obrigado."
+        Instruções de Resposta (replyMessage):
+        - Se for uma dúvida ou se faltar QUALQUER UM dos 4 itens, defina isQuote = false. Na sua resposta, esclareça a dúvida (se houver) e liste EXATAMENTE os itens que ainda faltam ele informar.
+        - Se ele enviou os 4 itens corretamente, defina isQuote = true e responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
         
-        Extraia os valores como números (prazos/validades em dias inteiros, ex: "terça que vem" = 5, "1 semana" = 7).
+        Extraia os valores numéricos (prazos/validades em dias inteiros, ex: "terça que vem" = 5, "1 semana" = 7).
         
         Retorne APENAS um objeto JSON válido, sem formatação markdown, estritamente com esta estrutura:
         {
