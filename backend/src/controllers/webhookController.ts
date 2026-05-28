@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai'; // NOVO SDK
 import { Request, Response } from 'express';
 import { env } from '../config/env';
 import { rfqModel } from '../models/rfqModel';
@@ -6,8 +6,8 @@ import { supplierModel } from '../models/supplierModel';
 import { telegramService } from '../services/telegramService';
 import { processarResposta } from './quoteController';
 
-// Inicializa o Gemini (certifique-se de ter GEMINI_API_KEY no seu .env)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Inicializa o cliente do Gemini com o novo SDK
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export const webhookController = {
   async handle(req: Request, res: Response) {
@@ -47,8 +47,7 @@ export const webhookController = {
         return res.status(200).send('OK');
       }
 
-      // --- MÁGICA DA IA AQUI ---
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      // --- MÁGICA DA IA COM O NOVO SDK ---
       const prompt = `
         Você é um assistente de suprimentos interagindo com um fornecedor.
         O sistema enviou um pedido de cotação para ele, e ele respondeu: "${text}"
@@ -62,8 +61,13 @@ export const webhookController = {
         }
       `;
 
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      // Chamada usando o padrão do novo SDK e o modelo 2.5-flash-lite
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-lite',
+        contents: prompt,
+      });
+
+      const rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
       const aiResponse = JSON.parse(rawText);
 
       // Se for apenas dúvida/conversa, responde via Telegram e NÃO avança para salvar no banco
@@ -78,8 +82,7 @@ export const webhookController = {
 
     } catch (error) {
       console.error('Erro no webhook:', error);
-      // Evita o vácuo mesmo se a IA ou o banco derem pau
-      await telegramService.sendMessage(chatId, '⚠️ Desculpe, ocorreu um erro. Você poderia reenviar sua mensagem informando preço e prazo?').catch(() => {});
+      await telegramService.sendMessage(chatId, '⚠️ Desculpe, ocorreu um erro na interpretação. Você poderia reenviar sua mensagem informando preço e prazo?').catch(() => {});
     }
 
     return res.status(200).send('OK');
