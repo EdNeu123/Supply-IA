@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Modal } from '@/components/ui/Modal';
+import { Semaforo } from '@/components/ui/Semaforo';
+import { Product } from '@/models/types';
+import { rfqService } from '@/services/apiServices';
 import { productService } from '@/services/productService';
 import { supplierService } from '@/services/supplierService';
-import { rfqService } from '@/services/apiServices';
-import { Semaforo } from '@/components/ui/Semaforo';
-import { Modal } from '@/components/ui/Modal';
-import { Plus, Edit2, Trash2, ShoppingCart, Send, Truck } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Edit2, Plus, Send, ShoppingCart, Trash2, Truck } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { Product } from '@/models/types';
 
 const emptyForm = (): Partial<Product> => ({
   name: '', sku: '', currentStock: 0,
@@ -34,9 +34,13 @@ export const Produtos = () => {
   const { data: products = [], isLoading } = useQuery({ queryKey: ['products'], queryFn: productService.list });
   const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: supplierService.list });
 
-  // Fornecedores ativos vinculados a um produto específico
-  const getSuppliersForProduct = (productId: string) =>
-    suppliers.filter(s => s.status === 'active' && (s.productIds ?? []).includes(productId));
+  // Pega TODOS os fornecedores vinculados (independente do status)
+  const getAllLinkedSuppliers = (productId: string) =>
+    suppliers.filter(s => (s.productIds ?? []).includes(productId));
+
+  // Pega apenas os fornecedores que estão com o Telegram ativo
+  const getActiveSuppliers = (productId: string) =>
+    getAllLinkedSuppliers(productId).filter(s => s.status === 'active');
 
   const saveMutation = useMutation({
     mutationFn: (data: Partial<Product>) =>
@@ -85,11 +89,16 @@ export const Produtos = () => {
 
       if (novoEstoque <= p.reorderPoint && p.currentStock > p.reorderPoint) {
         toast.warning(`⚠️ Ponto de pedido atingido para "${p.name}"!`);
-        const ativos = getSuppliersForProduct(p.id);
+        
+        const linked = getAllLinkedSuppliers(p.id);
+        const ativos = getActiveSuppliers(p.id);
+        
         if (ativos.length > 0) {
           rfqMutation.mutate({ productId: p.id, supplierIds: ativos.map(s => s.id) });
+        } else if (linked.length > 0) {
+          toast.error('O fornecedor está vinculado, mas o Telegram não está ativo. Peça para ele iniciar o bot.');
         } else {
-          toast.error('Nenhum fornecedor ativo vinculado a este produto. Vincule fornecedores em "Fornecedores".');
+          toast.error('Nenhum fornecedor vinculado a este produto. Vincule em "Fornecedores".');
         }
       } else {
         toast.success('Venda simulada! (-1 unidade)');
@@ -100,22 +109,28 @@ export const Produtos = () => {
   };
 
   const handleDispararCotacao = (p: Product) => {
-    const ativos = getSuppliersForProduct(p.id);
-    if (!ativos.length) {
-      toast.error('Nenhum fornecedor ativo vinculado a este produto. Vá em "Fornecedores" e vincule produtos.');
+    const linked = getAllLinkedSuppliers(p.id);
+    const ativos = getActiveSuppliers(p.id);
+
+    if (ativos.length === 0) {
+      if (linked.length > 0) {
+        toast.error('Há fornecedores vinculados, mas nenhum ativou o bot do Telegram ainda.');
+      } else {
+        toast.error('Nenhum fornecedor vinculado a este produto. Vá em "Fornecedores" e vincule produtos.');
+      }
       return;
     }
+    
     setSelectedProduct(p);
     setRfqModalOpen(true);
   };
 
   const confirmarCotacao = () => {
     if (!selectedProduct) return;
-    const ativos = getSuppliersForProduct(selectedProduct.id);
+    const ativos = getActiveSuppliers(selectedProduct.id);
     rfqMutation.mutate({ productId: selectedProduct.id, supplierIds: ativos.map(s => s.id) });
   };
 
-  // Preview do ponto de pedido no formulário
   const previewPP =
     (form.avgDailyConsumption ?? 0) > 0
       ? (Number(form.avgDailyConsumption) * Number(form.leadTimeDays ?? 0)) +
@@ -150,7 +165,9 @@ export const Produtos = () => {
             ) : products.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-10 text-text-2">Nenhum produto cadastrado.</td></tr>
             ) : products.map(p => {
-              const linkedSuppliers = getSuppliersForProduct(p.id);
+              const linkedSuppliers = getAllLinkedSuppliers(p.id);
+              const activeSuppliers = getActiveSuppliers(p.id);
+              
               return (
                 <tr key={p.id} className="hover:bg-surface-2 transition-colors">
                   <td className="px-6 py-3">
@@ -161,9 +178,16 @@ export const Produtos = () => {
                   <td className="px-6 py-3 text-text-2">{p.reorderPoint} un</td>
                   <td className="px-6 py-3">
                     {linkedSuppliers.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        <Truck size={13} className="text-green" />
-                        <span className="text-xs text-green font-medium">{linkedSuppliers.length} ativo(s)</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <Truck size={13} className={activeSuppliers.length > 0 ? "text-green" : "text-yellow"} />
+                          <span className={`text-xs font-medium ${activeSuppliers.length > 0 ? "text-green" : "text-text-1"}`}>
+                            {linkedSuppliers.length} vinculado(s)
+                          </span>
+                        </div>
+                        {activeSuppliers.length === 0 && (
+                          <span className="text-[10px] text-yellow">⚠️ Nenhum com Telegram ativo</span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-xs text-yellow">⚠️ Sem vínculo</span>
@@ -197,7 +221,6 @@ export const Produtos = () => {
         </table>
       </div>
 
-      {/* Modal Produto */}
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title={editId ? 'Editar Produto' : 'Novo Produto'}>
         <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -231,7 +254,6 @@ export const Produtos = () => {
         </form>
       </Modal>
 
-      {/* Modal Confirmar Cotação Manual */}
       <Modal isOpen={rfqModalOpen} onClose={() => setRfqModalOpen(false)} title="Disparar Cotação Manual">
         <div className="space-y-4">
           <p className="text-sm text-text-2">
@@ -239,7 +261,7 @@ export const Produtos = () => {
           </p>
           {selectedProduct && (
             <div className="bg-surface-2 rounded-xl p-3 space-y-1">
-              {getSuppliersForProduct(selectedProduct.id).map(s => (
+              {getActiveSuppliers(selectedProduct.id).map(s => (
                 <div key={s.id} className="flex items-center gap-2 text-sm">
                   <Truck size={14} className="text-accent" />
                   <span className="text-text-1 font-medium">{s.name}</span>

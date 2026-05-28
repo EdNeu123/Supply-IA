@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supplierService } from '@/services/supplierService';
-import { productService } from '@/services/productService';
 import { Modal } from '@/components/ui/Modal';
-import { Plus, Edit2, Trash2, Copy, Truck, CheckCircle2, Clock, XCircle, Link2 } from 'lucide-react';
-import { toast } from 'sonner';
 import { Supplier } from '@/models/types';
+import { productService } from '@/services/productService';
+import { supplierService } from '@/services/supplierService';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, Clock, Copy, Edit2, Link2, Plus, RefreshCw, Trash2, Truck, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 const emptyForm = (): Partial<Supplier> => ({ name: '', whatsapp: '', email: '', productIds: [] });
 
@@ -28,6 +28,7 @@ export const Fornecedores = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Supplier>>(emptyForm());
+  const [loadingLinkId, setLoadingLinkId] = useState<string | null>(null);
 
   const { data: suppliers = [], isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: supplierService.list });
   const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: productService.list });
@@ -35,7 +36,7 @@ export const Fornecedores = () => {
   const saveMutation = useMutation({
     mutationFn: (data: Partial<Supplier>) =>
       editId ? supplierService.update(editId, data) : supplierService.create(data),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ['suppliers'] });
       toast.success(`Fornecedor ${editId ? 'atualizado' : 'criado'}!`);
       setIsOpen(false);
@@ -72,9 +73,23 @@ export const Fornecedores = () => {
     toast.success('Copiado!');
   };
 
-  // Nome dos produtos vinculados ao fornecedor
-  const getProductNames = (ids: string[]) =>
-    ids.map(id => products.find(p => p.id === id)?.name).filter(Boolean).join(', ') || '—';
+  const handleGetInviteLink = async (s: Supplier) => {
+    if (s.inviteLink) {
+      copy(s.inviteLink);
+      return;
+    }
+    setLoadingLinkId(s.id);
+    try {
+      const link = await supplierService.getInviteLink(s.id);
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      navigator.clipboard.writeText(link).catch(() => {});
+      toast.success('Link gerado e copiado! Envie ao fornecedor.');
+    } catch {
+      toast.error('Erro ao gerar link. Verifique o backend.');
+    } finally {
+      setLoadingLinkId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -91,14 +106,12 @@ export const Fornecedores = () => {
         </button>
       </div>
 
-      {/* Aviso se não há produtos cadastrados */}
       {products.length === 0 && (
         <div className="p-4 bg-yellow-bg border border-yellow/30 rounded-xl text-sm text-yellow flex items-center gap-2">
           ⚠️ Cadastre produtos primeiro para poder vinculá-los aos fornecedores.
         </div>
       )}
 
-      {/* Lista */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {isLoading ? (
           <p className="text-text-2">Carregando...</p>
@@ -111,7 +124,6 @@ export const Fornecedores = () => {
         ) : (
           suppliers.map(s => (
             <div key={s.id} className="bg-surface p-5 rounded-2xl border border-border shadow-sm flex flex-col gap-3">
-              {/* Header do card */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -126,13 +138,11 @@ export const Fornecedores = () => {
                 </div>
               </div>
 
-              {/* Infos */}
               <div className="text-xs text-text-2 space-y-1">
                 {s.email    && <p><span className="text-text-3">E-mail:</span> {s.email}</p>}
                 {s.whatsapp && <p><span className="text-text-3">Contato:</span> {s.whatsapp}</p>}
               </div>
 
-              {/* Produtos vinculados */}
               <div className="pt-2 border-t border-border">
                 <p className="text-xs font-semibold text-text-3 mb-1.5 uppercase tracking-wide">Produtos vinculados</p>
                 {(s.productIds?.length ?? 0) > 0 ? (
@@ -153,36 +163,48 @@ export const Fornecedores = () => {
                 )}
               </div>
 
-              {/* Link Telegram */}
-              {s.status === 'pending' && s.inviteLink && (
-                <div className="pt-2 border-t border-border">
-                  <p className="text-xs font-semibold text-text-3 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                    <Link2 size={11} /> Link de ativação (Telegram)
+              <div className="pt-2 border-t border-border">
+                {s.status === 'active' ? (
+                  <p className="text-xs text-green flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Telegram ativado — pronto para receber cotações.
                   </p>
-                  <div className="flex items-center gap-2 bg-surface-2 px-2 py-1.5 rounded-lg">
-                    <input readOnly value={s.inviteLink} className="flex-1 bg-transparent text-xs text-text-2 outline-none truncate" />
-                    <button onClick={() => copy(s.inviteLink!)} className="p-1 bg-surface text-text-2 hover:text-accent rounded">
-                      <Copy size={13} />
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-text-3 uppercase tracking-wide flex items-center gap-1">
+                      <Link2 size={11} /> Link de ativação (Telegram)
+                    </p>
+                    {s.inviteLink && (
+                      <div className="flex items-center gap-2 bg-surface-2 px-2 py-1.5 rounded-lg">
+                        <input readOnly value={s.inviteLink} className="flex-1 bg-transparent text-xs text-text-2 outline-none truncate" />
+                        <button onClick={() => copy(s.inviteLink!)} className="p-1 bg-surface text-text-2 hover:text-accent rounded">
+                          <Copy size={13} />
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleGetInviteLink(s)}
+                      disabled={loadingLinkId === s.id}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-accent-bg text-accent border border-accent/30 rounded-xl text-xs font-medium hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {loadingLinkId === s.id ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : s.inviteLink ? (
+                        <><Copy size={13} /> Copiar link de convite</>
+                      ) : (
+                        <><Link2 size={13} /> Gerar link de convite</>
+                      )}
                     </button>
+                    <p className="text-xs text-text-3">Envie este link para o fornecedor ativar o bot.</p>
                   </div>
-                  <p className="text-xs text-text-3 mt-1">Envie este link para o fornecedor ativar o bot.</p>
-                </div>
-              )}
-              {s.status === 'active' && (
-                <p className="text-xs text-green flex items-center gap-1 pt-1 border-t border-border">
-                  <CheckCircle2 size={12} /> Telegram ativado — pronto para receber cotações.
-                </p>
-              )}
+                )}
+              </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Modal Criar/Editar */}
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title={editId ? 'Editar Fornecedor' : 'Novo Fornecedor'}>
         <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-5">
-
-          {/* Dados básicos */}
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-text-1 mb-1">Nome <span className="text-danger">*</span></label>
@@ -206,7 +228,6 @@ export const Fornecedores = () => {
             </div>
           </div>
 
-          {/* Vínculo com produtos */}
           <div>
             <label className="block text-sm font-medium text-text-1 mb-1">
               Produtos atendidos <span className="text-danger">*</span>
