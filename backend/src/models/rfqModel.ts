@@ -24,4 +24,8 @@ export const rfqModel = {
       .limit(1).get();
     return snap.empty ? null : snap.docs[0].data();
   },
+  // Atualiza status da RFQ (ex: 'sent' -> 'partial' -> 'answered')
+  async updateStatus(id: string, status: string) {
+    await col.doc(id).update({ status });
+  },
 };
