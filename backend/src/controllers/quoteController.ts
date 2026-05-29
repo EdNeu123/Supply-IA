@@ -52,7 +52,7 @@ export const quoteController = {
   async simulate(req: AuthRequest, res: Response) {
     const { rfqId, supplierId, rawReply } = req.body;
     const quote = await processarResposta(rfqId, supplierId, rawReply, req.user!.uid);
-    res.status(201).json({ message: 'Simulação concluída', quoteId: quote.id });
+    res.status(201).json({ message: 'Simulação concluída com sucesso', quoteId: quote.id });
   },
 };
 

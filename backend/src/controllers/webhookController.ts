@@ -269,7 +269,7 @@ export const webhookController = {
     } catch (error) {
       console.error("Erro no webhook:", error);
       await telegramService
-        .sendMessage(chatId, "⚠️ Deu um probleminha técnico aqui. Pode repetir a última resposta?")
+        .sendMessage(chatId, "⚠️ Deu um probleminha técnico aqui. Pode repetir a última resposta por favor?")
         .catch(() => {});
     }
 
