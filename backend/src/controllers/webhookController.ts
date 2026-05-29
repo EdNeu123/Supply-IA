@@ -10,15 +10,11 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export const webhookController = {
   async handle(req: Request, res: Response) {
-    if (req.headers["x-telegram-bot-api-secret-token"] !== env.telegram.webhookSecret) {
+    if (req.headers["x-telegram-bot-api-secret-token"] !== env.telegram.webhookSecret)
       return res.status(401).send("Unauthorized");
-    }
 
     const { message } = req.body;
-    
-    if (!message?.text) {
-      return res.status(200).send("OK");
-    }
+    if (!message?.text) return res.status(200).send("OK");
 
     const chatId = message.chat.id.toString();
     const text = message.text.trim();
@@ -36,6 +32,7 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
+      // Adiciona o "digitando..." para ganhar tempo
       await telegramService.sendChatAction(chatId);
 
       const supplier = await supplierModel.findByTelegramChatId(chatId);
@@ -50,67 +47,61 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      // Puxa a memória da conversa ou começa uma nova
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
-      // Configuração de data atual para cálculo de prazos relativos no bot
+      // Configuração de data atual para cálculo de prazos
       const hoje = new Date();
       const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
       const infoHoje = `Hoje é ${diasSemana[hoje.getDay()]} (data atual: ${hoje.toLocaleDateString('pt-BR')}).`;
 
-      const prompt = `Você é um assistente de suprimentos conversando com um fornecedor.
-Leia TODO o histórico de conversa abaixo para analisar o estado da cotação:
-"""
-${novoHistorico}
-"""
+      const prompt = `
+        Você é um assistente de suprimentos conversando com um fornecedor.
+        Aqui está o histórico atual da conversa sobre a cotação:
+        """
+        ${novoHistorico}
+        """
 
-INFORMAÇÕES DE CONTEXTO TEMPORAL:
-- ${infoHoje}
-- Se o fornecedor usar prazos relativos (ex: "quinta que vem", "amanhã", "daqui a 3 dias"), calcule a quantidade de dias a partir da data atual e preencha como um número inteiro.
-- Se o fornecedor disser que "não tem quantidade mínima" ou "qualquer quantia", defina minQuantity como 0.
+        INFORMAÇÕES DE CONTEXTO:
+        - ${infoHoje}
+        - Prazos relativos (ex: "quinta que vem", "amanhã"): calcule a quantidade de dias a partir de hoje como número inteiro.
+        - "não tem quantidade mínima" ou "qualquer quantia": defina minQuantity como 0.
+        
+        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
+        
+        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
+        1. Preço unitário
+        2. Quantidade mínima
+        3. Prazo de entrega
+        4. Validade da cotação
+        
+        Instruções:
+        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
+        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
+        
+        CRÍTICO: Se 'isQuote' for true, você DEVE varrer TODO o histórico e preencher TODOS os 4 valores no JSON abaixo. NUNCA retorne null se o fornecedor já informou o dado no passado.
 
-Seu objetivo é extrair 4 dados obrigatórios do histórico:
-1. Preço unitário (unitPrice)
-2. Quantidade mínima (minQuantity)
-3. Prazo de entrega em dias (leadTimeDays)
-4. Validade da cotação em dias (validityDays)
-
-REGRA 1: Se o fornecedor tiver dúvidas técnicas (ex: marca), responda: "Não exigimos marca específica, envie a melhor opção."
-REGRA 2: Verifique o histórico COMPLETO. Se AINDA FALTAR algum dos 4 dados, 'isQuote' = false. Agradeça o que foi enviado e pergunte APENAS pelo dado que falta.
-REGRA 3: Se TODOS os 4 dados já estiverem presentes em qualquer parte do histórico, 'isQuote' = true. Responda exatamente: "✅ Proposta registrada com sucesso no sistema! Obrigado."
-
-CRÍTICO: Se 'isQuote' for true, você DEVE varrer todo o histórico, capturar os valores corretos de todos os 4 itens e preenchê-los no JSON. NÃO retorne null para valores que foram informados em mensagens anteriores do histórico.
-
-Retorne APENAS o JSON estruturado abaixo:
-{
-  "isQuote": boolean,
-  "replyMessage": "Sua resposta aqui",
-  "unitPrice": number | null,
-  "minQuantity": number | null,
-  "leadTimeDays": number | null,
-  "validityDays": number | null
-}`;
+        Retorne APENAS um JSON válido, sem formatação markdown:
+        {
+          "isQuote": boolean,
+          "replyMessage": string,
+          "unitPrice": number | null,
+          "minQuantity": number | null,
+          "leadTimeDays": number | null,
+          "validityDays": number | null
+        }
+      `;
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
-        config: {
-          responseMimeType: "application/json"
-        }
       });
 
-      const rawText = response.text?.trim() || "{}";
-      let aiResponse;
-      try {
-        aiResponse = JSON.parse(rawText);
-      } catch (parseError) {
-        console.error("Erro no parse do JSON do Gemini no webhook:", rawText);
-        throw new Error("Retorno inválido da IA.");
-      }
+      // A linha exata do seu código antigo que não dá erro no seu TS
+      const rawText = response.text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const aiResponse = JSON.parse(rawText);
 
       if (!aiResponse.isQuote) {
-        // Salva a interação na memória temporária do banco
         await supplierModel.update(supplier.ownerId, supplier.id, { 
           chatHistory: novoHistorico + `\nAssistente: ${aiResponse.replyMessage}` 
         });
@@ -118,7 +109,6 @@ Retorne APENAS o JSON estruturado abaixo:
         return res.status(200).send("OK");
       }
 
-      // Se aprovou, manda o histórico completo e os dados populados pro quoteController
       await processarResposta(rfq.id, supplier.id, novoHistorico, supplier.ownerId, {
         unitPrice: aiResponse.unitPrice,
         minQuantity: aiResponse.minQuantity,
@@ -126,16 +116,15 @@ Retorne APENAS o JSON estruturado abaixo:
         validityDays: aiResponse.validityDays
       });
       
-      // DELETA o histórico do banco para limpar a memória temporária
       await supplierModel.update(supplier.ownerId, supplier.id, { chatHistory: "" });
       
       await telegramService.sendMessage(chatId, aiResponse.replyMessage);
-      return res.status(200).send("OK");
 
     } catch (error) {
       console.error("Erro no webhook:", error);
-      await telegramService.sendMessage(chatId, "⚠️ Desculpe, tive um problema ao processar sua proposta. Pode repetir os dados?").catch(() => {});
-      return res.status(200).send("OK");
+      await telegramService.sendMessage(chatId, "⚠️ Desculpe, não entendi. Pode repetir?").catch(() => {});
     }
+
+    return res.status(200).send("OK");
   },
 };
