@@ -1,7 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/env';
 
-// Puxando a chave do mesmo jeito que funcionou no webhook para garantir
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || env.gemini.apiKey || "" });
 
 export const iaService = {
@@ -16,18 +15,23 @@ Seu objetivo é extrair 4 dados e 1 observação (se houver).
 
 INFORMAÇÕES DE CONTEXTO:
 - ${infoHoje}
-- Se o fornecedor usar datas relativas (ex: "quinta que vem", "amanhã", "daqui a 15 dias"), faça a conta a partir de hoje e retorne o número de dias inteiros.
-- Se o fornecedor disser que "não tem quantia mínima", retorne 0 no campo quantidade_minima.
+- Expressões como "comprar 1 caixa com 15" significam que a quantidade mínima ofertada foi 15. Extraia o número real de unidades.
+
+REGRA DE DATAS (MUITO IMPORTANTE):
+- O fornecedor frequentemente usa datas relativas (ex: "terça que vem", "amanhã", "daqui a 5 dias").
+- Você DEVE calcular a diferença exata de dias a partir de HOJE e transformar em um número inteiro.
+- Para evitar erros, faça a conta explicitamente no campo "raciocinio_datas" antes de preencher os números.
 
 Responda APENAS com JSON válido, sem formatação markdown, neste exato formato:
 {
+  "raciocinio_datas": "Explique aqui sua conta de dias a partir de hoje (ex: Hoje é sexta, terça que vem são +4 dias)",
   "preco_unitario": number | null,
   "prazo_entrega_dias": number | null,
   "quantidade_minima": number | null,
   "validade_dias": number | null,
   "observacao": string | null
 }
-Se um campo não estiver no texto, use null. Extraia os valores como números (prazos/validades em dias). Não invente valores.
+Se um campo não estiver no texto, use null. Não invente valores que não existam.
 
 Texto do fornecedor: """${textoFornecedor}"""`;
 
@@ -36,7 +40,6 @@ Texto do fornecedor: """${textoFornecedor}"""`;
         contents: prompt,
       });
 
-      // A linha de ouro que limpou o erro lá no Webhook
       const rawText = response.text.replace(/```json/g, "").replace(/```/g, "").trim();
       return JSON.parse(rawText);
 
