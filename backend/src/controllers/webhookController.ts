@@ -48,24 +48,35 @@ export const webhookController = {
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
+      // Configuração de data atual para cálculo de prazos
+      const hoje = new Date();
+      const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+      const infoHoje = `Hoje é ${diasSemana[hoje.getDay()]} (data atual: ${hoje.toLocaleDateString('pt-BR')}).`;
+
       const prompt = `
         Você é um assistente de suprimentos conversando com um fornecedor.
         Aqui está o histórico atual da conversa sobre a cotação:
         """
         ${novoHistorico}
         """
+
+        INFORMAÇÕES DE CONTEXTO:
+        - ${infoHoje}
+        - Prazos relativos (ex: "quinta que vem", "amanhã"): calcule a quantidade de dias a partir de hoje como número inteiro.
+        - "não tem quantidade mínima" ou "qualquer quantia": defina minQuantity como 0.
         
         REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
         
-        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
+        REGRA 2 - DADOS OBRIGATÓRIOS (CRÍTICO): A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens abaixo:
         1. Preço unitário
         2. Quantidade mínima
         3. Prazo de entrega
         4. Validade da cotação
         
         Instruções:
-        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
-        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
+        - Se AINDA FALTAR algum dos 4 itens ou se você não conseguir extrair algum deles: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA. NUNCA peça para enviar tudo de novo.
+        - SÓ RETORNE isQuote = true se TODOS os 4 itens já estiverem informados no histórico.
+        - Se isQuote = true, a replyMessage deve ser: "✅ Proposta registrada com sucesso no sistema! Obrigado." E VOCÊ DEVE preencher os 4 valores no JSON (nunca use null se o dado já foi informado antes).
         
         Extraia os valores como números (prazos/validades em dias, ex: "terça que vem" = 5).
         
@@ -80,8 +91,9 @@ export const webhookController = {
         }
       `;
 
+      // Alterado para o 2.5-flash normal, que tem melhor raciocínio lógico
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
 
