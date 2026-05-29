@@ -9,11 +9,10 @@ import { processarResposta } from "./quoteController";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-// ─── Helpers de data ────────────────────────────────────────────────────────
+// ─── Helpers de data ─────────────────────────────────────────────────────────
 
-function calcularDiasParaDiaSemana(targetDay: number): number {
-  const hoje = new Date().getDay();
-  const diff = (targetDay - hoje + 7) % 7;
+function diasParaDiaSemana(targetDay: number): number {
+  const diff = (targetDay - new Date().getDay() + 7) % 7;
   return diff === 0 ? 7 : diff; // "terça que vem" = próxima terça, nunca hoje
 }
 
@@ -25,137 +24,105 @@ function buildDateContext(): string {
   const amanha = new Date(hoje);
   amanha.setDate(hoje.getDate() + 1);
 
-  const dias: Record<string, number> = {
-    "domingo":        calcularDiasParaDiaSemana(0),
-    "segunda":        calcularDiasParaDiaSemana(1),
-    "segunda-feira":  calcularDiasParaDiaSemana(1),
-    "terça":          calcularDiasParaDiaSemana(2),
-    "terca":          calcularDiasParaDiaSemana(2),
-    "terça-feira":    calcularDiasParaDiaSemana(2),
-    "quarta":         calcularDiasParaDiaSemana(3),
-    "quarta-feira":   calcularDiasParaDiaSemana(3),
-    "quinta":         calcularDiasParaDiaSemana(4),
-    "quinta-feira":   calcularDiasParaDiaSemana(4),
-    "sexta":          calcularDiasParaDiaSemana(5),
-    "sexta-feira":    calcularDiasParaDiaSemana(5),
-    "sábado":         calcularDiasParaDiaSemana(6),
-    "sabado":         calcularDiasParaDiaSemana(6),
-  };
+  const diasSemana = [
+    ["domingo",       diasParaDiaSemana(0)],
+    ["segunda",       diasParaDiaSemana(1)],
+    ["segunda-feira", diasParaDiaSemana(1)],
+    ["terça",         diasParaDiaSemana(2)],
+    ["terca",         diasParaDiaSemana(2)],
+    ["terça-feira",   diasParaDiaSemana(2)],
+    ["quarta",        diasParaDiaSemana(3)],
+    ["quarta-feira",  diasParaDiaSemana(3)],
+    ["quinta",        diasParaDiaSemana(4)],
+    ["quinta-feira",  diasParaDiaSemana(4)],
+    ["sexta",         diasParaDiaSemana(5)],
+    ["sexta-feira",   diasParaDiaSemana(5)],
+    ["sábado",        diasParaDiaSemana(6)],
+    ["sabado",        diasParaDiaSemana(6)],
+  ] as [string, number][];
 
-  const diasSemana = Object.entries(dias)
-    .map(([k, v]) => `  - "${k} que vem" ou "próxima ${k}" → ${v} dias`)
+  const linhasDias = diasSemana
+    .filter(([k]) => !["terca", "sabado"].includes(k)) // remove duplicatas sem acento
+    .map(([k, v]) => `  - "${k} que vem" / "próxima ${k}" → ${v} dias`)
     .join("\n");
 
-  const diaSemanaHoje = hoje.toLocaleDateString("pt-BR", { weekday: "long" });
-  const semanaQueVemSeg = calcularDiasParaDiaSemana(1);
-  const fimDeSemana = calcularDiasParaDiaSemana(6);
+  return `Hoje é ${hoje.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}.
 
-  return `Hoje é ${diaSemanaHoje}, ${fmt(hoje)}.
-Referências de prazo:
-  - "hoje" / "imediato" / "pronta entrega" / "agora" → 0
+Tabela de conversão de prazos (calcule SEMPRE, nunca peça ao fornecedor):
+  - "hoje" / "imediato" / "pronta entrega" → 0
   - "amanhã" (${fmt(amanha)}) → 1
   - "depois de amanhã" → 2
-  - "essa semana" / "até o final da semana" → ${fimDeSemana}
-  - "semana que vem" / "próxima semana" → ${semanaQueVemSeg}
-  - Dias da semana (próxima ocorrência):
-${diasSemana}
-  - Data absoluta (ex: "30/05", "05/06/2026"):
-    Calcule a diferença em dias corridos entre hoje e a data. NUNCA peça ao fornecedor para converter — você calcula.
-    Exemplo: se hoje é ${fmt(hoje)} e ele disser "${fmt(amanha)}", o prazo é 1 dia.`;
+  - "essa semana" / "fim de semana" → ${diasParaDiaSemana(6)}
+  - "semana que vem" / "próxima semana" → ${diasParaDiaSemana(1) + 7}
+${linhasDias}
+  - Data absoluta (ex: "30/05", "05/06"): calcule a diferença em dias corridos entre hoje (${fmt(hoje)}) e a data.`;
 }
 
-// ─── Build prompt ────────────────────────────────────────────────────────────
+// ─── Build prompt ─────────────────────────────────────────────────────────────
+
+interface DraftQuote {
+  unitPrice:    number | null;
+  minQuantity:  number | null;
+  leadTimeDays: number | null;
+  validityDays: number | null;
+}
 
 function buildPrompt(
   productContext: string,
-  rascunho: Record<string, number | null>,
+  draft: DraftQuote,
   text: string
 ): string {
+  // Mostra quais campos já estão preenchidos para o modelo não perguntar de novo
+  const status = Object.entries(draft)
+    .map(([k, v]) => `  ${k}: ${v !== null ? v : "❌ FALTA"}`)
+    .join("\n");
+
   return `
-Você é Lia, assistente virtual de compras da Supply IA. Conversa no Telegram com fornecedores para coletar dados de cotação de forma natural, eficiente e humanizada.
+Você é Lia, assistente virtual de compras da Supply IA. Conversa no Telegram com fornecedores para coletar dados de cotação.
 
 ═══════════════════════════════════════════
-CONTEXTO DA COTAÇÃO
+CONTEXTO
 ═══════════════════════════════════════════
 Produto: ${productContext}
 ${buildDateContext()}
 
-Rascunho atual (o que já foi coletado):
-${JSON.stringify(rascunho, null, 2)}
+Estado atual do rascunho (campos JÁ COLETADOS — NÃO PERGUNTE DE NOVO):
+${status}
 
 Nova mensagem do fornecedor: "${text}"
 
 ═══════════════════════════════════════════
-CAMPOS QUE VOCÊ PRECISA COLETAR
+CAMPOS A COLETAR
 ═══════════════════════════════════════════
-1. unitPrice      → Preço unitário em R$ (decimal). Se ele passar preço de caixa/fardo, calcule o unitário.
-2. minQuantity    → Quantidade mínima (inteiro). "sem mínimo" / "qualquer quantidade" → 1.
-3. leadTimeDays   → Prazo de entrega em DIAS CORRIDOS a partir de hoje (inteiro ≥ 0).
-4. validityDays   → Validade da cotação em DIAS a partir de hoje (inteiro ≥ 1).
+1. unitPrice      → Preço unitário em R$ (decimal)
+2. minQuantity    → Quantidade mínima (inteiro; "sem mínimo" = 1)
+3. leadTimeDays   → Prazo de entrega em DIAS CORRIDOS (inteiro ≥ 0)
+4. validityDays   → Validade da cotação em DIAS (inteiro ≥ 1)
 
 ═══════════════════════════════════════════
 REGRAS DE INTERPRETAÇÃO
 ═══════════════════════════════════════════
 
-PRAZOS E DATAS
-- Use a tabela de referências acima para converter qualquer expressão temporal em número de dias.
-- NUNCA peça para o fornecedor dizer "em dias". Você converte.
-- "terça que vem" = ${calcularDiasParaDiaSemana(2)} dias. "quinta que vem" = ${calcularDiasParaDiaSemana(4)} dias. Calcule baseado no dia de hoje.
-- Datas absolutas: subtraia hoje da data informada. Se disser "30/05" e hoje é ${new Date().toLocaleDateString("pt-BR")}, calcule a diferença.
-
-PREÇOS
-- Aceite: 14,99 / R$14,99 / 14.99 / "quatorze e noventa e nove"
-- Caixa ou fardo: "caixa com 10 por R$50" → unitPrice = 5.00 (faça a conta)
-- Gírias: "um conto" = R$100, "cinquenta pilas" = R$50
-
-QUANTIDADE MÍNIMA
-- "sem mínimo" / "não tem" / "tanto faz" / "qualquer" → 1
-- "caixa fechada de 12" → 12
-
-MENSAGENS COM MÚLTIPLOS DADOS
-Se o fornecedor mandar vários dados de uma vez (ex: "14,99, entrega quinta, sem mínimo, vale até 30/05"),
-extraia TODOS de uma só vez. Só pergunte o que genuinamente ficou faltando.
-NÃO repita perguntas sobre o que já foi dito na mesma mensagem.
+PRAZOS: use a tabela acima. NUNCA peça "em quantos dias". Você converte.
+PREÇOS: aceite R$14,99 / 14,99 / "quatorze reais". Caixa com N unidades → calcule o unitário.
+MÍNIMO: "sem mínimo" / "não tem" / "qualquer" → 1.
+MÚLTIPLOS DADOS: se o fornecedor der vários dados de uma vez, extraia TODOS. Pergunte só o que genuinamente ficou faltando.
+CAMPOS PREENCHIDOS: NÃO volte a perguntar campos que já têm valor no rascunho acima.
 
 ═══════════════════════════════════════════
-COMO CONDUZIR A CONVERSA
+CONDUTA
 ═══════════════════════════════════════════
-
-ESTILO GERAL
-- Natural, amigável, direta. Escreva como uma pessoa real no Telegram.
-- Varie as confirmações: "Ótimo!", "Perfeito!", "Entendido!", "Combinado!", "Certo!", "Ok, anotado!"
-- Evite repetir a mesma frase de abertura toda mensagem.
-- Máximo 1-2 emojis por mensagem.
-- Máximo 1 pergunta por mensagem. Nunca faça duas perguntas ao mesmo tempo.
-
-SE O FORNECEDOR PERGUNTAR ALGO
-Responda de forma curta e natural, depois emende com o que precisa:
-- "Qual marca?" → "A marca do descritivo, ou similar de mesma qualidade. Pode confirmar o prazo de entrega?"
-- "Como é o pagamento?" → "Padrão da empresa: boleto 30 dias. E o frete é CIF por conta de vocês. Voltando — [próxima pergunta]"
-- "Onde fica o galpão?" → "Te passo o endereço depois pelo pessoal de logística! Me fala, [próxima pergunta]"
-- "É urgente?" → "Sim, precisamos o quanto antes! Qual o prazo mínimo que você consegue?"
-- Qualquer outra pergunta: responda curto e volte ao assunto.
-
-PERGUNTAS PENDENTES (use linguagem variada)
-- Faltando prazo: "Quando você consegue entregar?" / "Qual o prazo de entrega?" / "Em quanto tempo chega?"
-- Faltando preço: "Qual o preço unitário?" / "Como fica o valor por unidade?"
-- Faltando mínimo: "Tem pedido mínimo?" / "Qual a quantidade mínima?"
-- Faltando validade: "Por quanto tempo esse preço é válido?" / "Até quando vale essa proposta?"
-
-CANCELAMENTO
-Se o fornecedor indicar que não tem o produto / sem estoque / não atende: isCanceled = true.
-replyMessage = despedida natural. Ex: "Entendido, sem problemas! Obrigada mesmo assim. 👋"
-
-SAUDAÇÕES E MENSAGENS INFORMAIS
-Responda naturalmente e emende com o que precisa.
-Ex: "Oi tudo bem?" → "Tudo ótimo, obrigada! 😊 Me conta, [próxima pergunta pendente]"
+- Natural, amigável, direta. Varie confirmações: "Ótimo!", "Perfeito!", "Entendido!", "Ok, anotado!"
+- Máximo 1 pergunta por mensagem. Máximo 2 frases.
+- Se o fornecedor perguntar algo: responda curto e emende com o que precisa.
+  - "Qual marca?" → "A do descritivo ou similar. [próxima pergunta]"
+  - "Como é o pagamento?" → "Boleto 30 dias, frete CIF. [próxima pergunta]"
+- Se não tiver o produto / sem estoque: isCanceled = true, despedida natural.
 
 ═══════════════════════════════════════════
-RETORNO OBRIGATÓRIO
+RETORNO
 ═══════════════════════════════════════════
-
-Retorne SOMENTE um JSON válido, sem markdown, sem texto fora do JSON:
-
+Retorne SOMENTE JSON válido, sem markdown:
 {
   "updatedDraft": {
     "unitPrice": number | null,
@@ -163,31 +130,30 @@ Retorne SOMENTE um JSON válido, sem markdown, sem texto fora do JSON:
     "leadTimeDays": number | null,
     "validityDays": number | null
   },
-  "isComplete": boolean,
+  "isQuote": boolean,
   "isCanceled": boolean,
   "replyMessage": "string"
 }
 
 Regras:
-- updatedDraft: inclua TODOS os 4 campos, mesmo os já preenchidos anteriormente
-- isComplete: true SOMENTE se todos os 4 campos ≠ null E isCanceled = false
-- isCanceled: true se fornecedor não consegue fornecer
-- Se isComplete = true, replyMessage DEVE SER exatamente: "✅ Proposta registrada com sucesso! Muito obrigado. 😊"
-- replyMessage: máximo 2 frases curtas
+- updatedDraft: inclua TODOS os 4 campos, mesmo os já preenchidos — copie os valores existentes do rascunho.
+- isQuote: true SOMENTE se todos os 4 campos de updatedDraft ≠ null E isCanceled = false.
+- Se isQuote = true: replyMessage = "✅ Proposta registrada com sucesso! Muito obrigado. 😊"
+- replyMessage: máximo 2 frases.
 `.trim();
 }
 
-// ─── Controller ──────────────────────────────────────────────────────────────
+// ─── Controller ───────────────────────────────────────────────────────────────
 
 export const webhookController = {
   async handle(req: Request, res: Response) {
-    // 1. Validação de segurança
+    // 1. Segurança
     if (req.headers["x-telegram-bot-api-secret-token"] !== env.telegram.webhookSecret)
       return res.status(401).send("Unauthorized");
 
     const { message } = req.body;
 
-    // 2. Mensagens sem texto (áudio, foto, sticker, etc)
+    // 2. Sem texto (áudio, foto, sticker)
     if (!message?.text) {
       if (message?.chat?.id) {
         await telegramService.sendMessage(
@@ -199,10 +165,10 @@ export const webhookController = {
     }
 
     const chatId = message.chat.id.toString();
-    const text = message.text.trim();
+    const text   = message.text.trim();
 
     try {
-      // 3. Onboarding (/start)
+      // 3. Onboarding
       if (text.startsWith("/start")) {
         const token = text.split(" ")[1];
         if (token) {
@@ -214,19 +180,19 @@ export const webhookController = {
             });
             await telegramService.sendMessage(
               chatId,
-              "✅ Cadastro concluído! Você receberá cotações da nossa empresa por aqui. Qualquer dúvida, é só falar. 😊"
+              "✅ Cadastro concluído! Você receberá cotações da nossa empresa por aqui. 😊"
             );
           }
         }
         return res.status(200).send("OK");
       }
 
-      // 4. Identificação do fornecedor
+      // 4. Identificar fornecedor
       const supplier = await supplierModel.findByTelegramChatId(chatId);
       if (!supplier) {
         await telegramService.sendMessage(
           chatId,
-          "⚠️ Não encontrei seu cadastro. Acesse o link de convite enviado pelo gestor para se vincular."
+          "⚠️ Cadastro não encontrado. Acesse o link de convite enviado pelo gestor."
         );
         return res.status(200).send("OK");
       }
@@ -236,50 +202,59 @@ export const webhookController = {
       if (!rfq) {
         await telegramService.sendMessage(
           chatId,
-          "Olá! No momento não há cotações abertas para você. Assim que precisarmos, avisamos por aqui. 😊"
+          "Olá! Sem cotações abertas no momento. Assim que precisarmos avisamos. 😊"
         );
         return res.status(200).send("OK");
       }
 
-      // 6. Contexto do produto
+      // 6. Produto
       const product = await productModel.findById(supplier.ownerId, rfq.productId);
       const productContext = product
         ? `${product.name}${product.sku ? ` (SKU: ${product.sku})` : ""}`
-        : "Produto não encontrado";
+        : "Produto não identificado";
 
-      // 7. Rascunho atual
-      const rascunho: Record<string, number | null> = supplier.draftQuote ?? {
-        unitPrice: null,
-        minQuantity: null,
+      // 7. Rascunho atual — lê do banco (persiste entre mensagens)
+      //    IMPORTANTE: draftQuote é um objeto JSON salvo no Firestore,
+      //    não texto livre. Por isso não perde dados entre rodadas.
+      const draft: DraftQuote = supplier.draftQuote ?? {
+        unitPrice:    null,
+        minQuantity:  null,
         leadTimeDays: null,
         validityDays: null,
       };
 
-      // 8. Chamada do Gemini
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: buildPrompt(productContext, rascunho, text),
+      // 8. Chamada Gemini
+      const geminiResponse = await ai.models.generateContent({
+        model:    "gemini-2.5-flash-lite",
+        contents: buildPrompt(productContext, draft, text),
       });
 
-      const rawText = (response.text ?? "")
+      const rawText = (geminiResponse.text ?? "")
         .replace(/```json/g, "")
         .replace(/```/g, "")
         .trim();
 
-      const aiResponse = JSON.parse(rawText);
+      const aiResponse = JSON.parse(rawText) as {
+        updatedDraft: DraftQuote;
+        isQuote:      boolean;
+        isCanceled:   boolean;
+        replyMessage: string;
+      };
 
-      // 9. Cancelamento
+      // 9. Cancelamento (sem estoque, não atende, etc)
       if (aiResponse.isCanceled) {
+        // Limpa rascunho ao cancelar
         await supplierModel.update(supplier.ownerId, supplier.id, {
           draftQuote: null,
-          chatHistory: "",
         });
         await telegramService.sendMessage(chatId, aiResponse.replyMessage);
         return res.status(200).send("OK");
       }
 
-      // 10. Incompleto — salva rascunho e continua
-      if (!aiResponse.isComplete) {
+      // 10. Incompleto — persiste rascunho atualizado e continua
+      if (!aiResponse.isQuote) {
+        // ← CORREÇÃO PRINCIPAL: salva draftQuote (JSON estruturado), não chatHistory (texto)
+        // Assim o próximo round lê valores exatos, não reextrai de texto livre
         await supplierModel.update(supplier.ownerId, supplier.id, {
           draftQuote: aiResponse.updatedDraft,
         });
@@ -287,11 +262,11 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      // 11. Completo — salva cotação
+      // 11. Completo — registra cotação e limpa rascunho
       await processarResposta(
         rfq.id,
         supplier.id,
-        "Cotação coletada via chat estruturado (Lia)",
+        `Cotação coletada via chat (Lia): ${JSON.stringify(aiResponse.updatedDraft)}`,
         supplier.ownerId,
         {
           unitPrice:    aiResponse.updatedDraft.unitPrice,
@@ -303,17 +278,13 @@ export const webhookController = {
 
       await supplierModel.update(supplier.ownerId, supplier.id, {
         draftQuote: null,
-        chatHistory: "",
       });
       await telegramService.sendMessage(chatId, aiResponse.replyMessage);
 
     } catch (error) {
       console.error("Erro no webhook:", error);
       await telegramService
-        .sendMessage(
-          chatId,
-          "⚠️ Deu um probleminha aqui no sistema. Pode repetir sua última mensagem?"
-        )
+        .sendMessage(chatId, "⚠️ Deu um probleminha aqui. Pode repetir sua última mensagem?")
         .catch(() => {});
     }
 
