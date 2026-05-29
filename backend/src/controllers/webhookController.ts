@@ -16,10 +16,10 @@ export const webhookController = {
 
     const { message } = req.body;
     
-    // 1. Resposta IMEDIATA para o Telegram para evitar timeout e mensagens duplicadas
-    res.status(200).send("OK");
-
-    if (!message?.text) return;
+    // Se não for uma mensagem de texto, a gente já responde e mata logo
+    if (!message?.text) {
+      return res.status(200).send("OK");
+    }
 
     const chatId = message.chat.id.toString();
     const text = message.text.trim();
@@ -34,29 +34,28 @@ export const webhookController = {
             await telegramService.sendMessage(chatId, "✅ Cadastro concluído! Você receberá nossas cotações por aqui.");
           }
         }
-        return;
+        return res.status(200).send("OK");
       }
 
-      // 2. Avisa ao fornecedor que a I.A. está "digitando..."
+      // Avisa ao fornecedor que a I.A. está "digitando..." para ganhar uns segundos
       await telegramService.sendChatAction(chatId);
 
       const supplier = await supplierModel.findByTelegramChatId(chatId);
       if (!supplier) {
         await telegramService.sendMessage(chatId, "⚠️ Cadastro não encontrado. Acesse o link de convite novamente.");
-        return;
+        return res.status(200).send("OK");
       }
 
       const rfq = await rfqModel.findOpenBySupplier(supplier.id);
       if (!rfq) {
         await telegramService.sendMessage(chatId, "⚠️ Não há cotações abertas para você no momento.");
-        return;
+        return res.status(200).send("OK");
       }
 
       // Puxa a memória da conversa ou começa uma nova
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
-      // Configuração de datas para que o Gemini entenda prazos relativos no Telegram
       const hoje = new Date();
       const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
       const infoHoje = `Hoje é ${diasSemana[hoje.getDay()]}, dia ${hoje.toLocaleDateString('pt-BR')}.`;
@@ -101,15 +100,25 @@ Retorne APENAS um JSON válido. Use null se o dado ainda não foi informado:
         }
       });
 
-      const aiResponse = JSON.parse(response.text?.trim() || "{}");
+      // Validando a conversão do JSON com cuidado
+      const rawText = response.text?.trim() || "{}";
+      let aiResponse;
+      try {
+        aiResponse = JSON.parse(rawText);
+      } catch (parseError) {
+        console.error("Erro ao fazer parse do JSON do Gemini:", rawText);
+        throw new Error("Gemini não retornou um JSON válido.");
+      }
 
       if (!aiResponse.isQuote) {
-        // Salva a interação (pergunta + resposta) na memória temporária do banco
+        // Salva a interação na memória temporária do banco
         await supplierModel.update(supplier.ownerId, supplier.id, { 
           chatHistory: novoHistorico + `\nAssistente: ${aiResponse.replyMessage}` 
         });
         await telegramService.sendMessage(chatId, aiResponse.replyMessage);
-        return;
+        
+        // SÓ RESPONDE HTTP DEPOIS DE TUDO TERMINAR
+        return res.status(200).send("OK");
       }
 
       // Se aprovou, manda o histórico completo pro quoteController
@@ -124,10 +133,16 @@ Retorne APENAS um JSON válido. Use null se o dado ainda não foi informado:
       await supplierModel.update(supplier.ownerId, supplier.id, { chatHistory: "" });
       
       await telegramService.sendMessage(chatId, aiResponse.replyMessage);
+      
+      // SÓ RESPONDE HTTP DEPOIS DE TUDO TERMINAR
+      return res.status(200).send("OK");
 
     } catch (error) {
       console.error("Erro no webhook:", error);
-      await telegramService.sendMessage(chatId, "⚠️ Desculpe, não entendi. Pode repetir?").catch(() => {});
+      await telegramService.sendMessage(chatId, "⚠️ Desculpe, tive um pequeno problema processando sua resposta. Pode repetir?").catch(() => {});
+      
+      // Mesmo dando erro, respondemos 200 pro Telegram não ficar preso num loop
+      return res.status(200).send("OK");
     }
   },
 };
