@@ -1,12 +1,12 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env';
 
-// Usando a nova SDK @google/genai
-const ai = new GoogleGenAI({ apiKey: env.gemini.apiKey });
+const genAI = new GoogleGenerativeAI(env.gemini.apiKey);
 
 export const iaService = {
   async estruturarCotacao(textoFornecedor: string) {
     try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       const prompt = `Você extrai dados de uma cotação enviada por um fornecedor em texto livre (pt-BR).
 Responda APENAS com JSON válido, sem markdown, neste formato:
 {
@@ -19,18 +19,10 @@ Responda APENAS com JSON válido, sem markdown, neste formato:
 Se um campo não estiver no texto, use null. Não invente valores.
 Texto do fornecedor: """${textoFornecedor}"""`;
 
-      // Atualizado para a nova sintaxe e modelo v2.5
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
-        contents: prompt,
-      });
-
-      const rawText = (response.text || '')
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim();
-        
-      return JSON.parse(rawText);
+      const result = await model.generateContent(prompt);
+      let text = result.response.text().trim()
+        .replace(/^```json\n/, '').replace(/\n```$/, '');
+      return JSON.parse(text);
     } catch (error) {
       console.error('Erro no parse do Gemini:', error);
       return null;
