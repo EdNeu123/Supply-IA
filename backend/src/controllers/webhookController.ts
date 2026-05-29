@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { env } from "../config/env";
 import { rfqModel } from "../models/rfqModel";
 import { supplierModel } from "../models/supplierModel";
+import { productModel } from "../models/productModel"; // 👈 Import necessário
 import { telegramService } from "../services/telegramService";
 import { processarResposta } from "./quoteController";
 
@@ -44,30 +45,41 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
+      // Busca os detalhes reais do produto para a IA não ficar genérica
+      const product = await productModel.findById(supplier.ownerId, rfq.productId);
+      const productContext = product 
+        ? `Produto: ${product.name} | SKU: ${product.sku || 'N/A'}`
+        : "Detalhes do produto não encontrados.";
+
       // Puxa a memória da conversa ou começa uma nova
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
       const prompt = `
-        Você é um assistente de suprimentos conversando com um fornecedor.
-        Aqui está o histórico atual da conversa sobre a cotação:
+        Você é um assistente de suprimentos humano e direto, negociando via Telegram com um fornecedor.
+        
+        DADOS DO PRODUTO COTADO AGORA:
+        ${productContext}
+
+        HISTÓRICO DA CONVERSA:
         """
         ${novoHistorico}
         """
         
-        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
-        
-        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
+        OBJETIVO: 
+        Coletar EXATAMENTE 4 informações do fornecedor de forma fluida:
         1. Preço unitário
         2. Quantidade mínima
-        3. Prazo de entrega
-        4. Validade da cotação
+        3. Prazo de entrega (em dias)
+        4. Validade da cotação (em dias)
         
-        Instruções:
-        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
-        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
+        REGRAS DE COMPORTAMENTO:
+        1. ADAPTAÇÃO AO PRODUTO: Se o fornecedor perguntar detalhes técnicos (ex: marca, tamanho), responda com base nos DADOS DO PRODUTO acima. Se a informação não estiver lá, diga de forma natural: "A princípio não temos restrição, pode cotar a sua melhor opção".
+        2. PASSO A PASSO HUMANO: Analise todo o histórico. Se AINDA FALTAR informação, isQuote = false. Gere uma "replyMessage" natural e curta perguntando APENAS o que falta (ex: "Show, e qual o prazo de entrega?"). NUNCA mande uma lista robótica do que falta.
+        3. MEMÓRIA: O que o fornecedor já respondeu nas mensagens anteriores do histórico continua valendo. Extraia tudo.
+        4. SUCESSO: Se os 4 itens já estiverem presentes no histórico inteiro, isQuote = true e a replyMessage deve ser um agradecimento (ex: "✅ Proposta registrada com sucesso! Obrigado.").
         
-        Extraia os valores como números (prazos/validades em dias, ex: "terça que vem" = 5).
+        Extraia os valores como números.
         
         Retorne APENAS um JSON válido, sem formatação markdown:
         {
@@ -89,7 +101,7 @@ export const webhookController = {
       const aiResponse = JSON.parse(rawText);
 
       if (!aiResponse.isQuote) {
-        // Salva a interação (pergunta + resposta) na memória temporária do banco
+        // Atualiza a memória com a pergunta que a IA acabou de fazer
         await supplierModel.update(supplier.ownerId, supplier.id, { 
           chatHistory: novoHistorico + `\nAssistente: ${aiResponse.replyMessage}` 
         });
@@ -97,7 +109,7 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      // Se aprovou, manda o histórico completo pro quoteController
+      // Tudo preenchido: salva a cotação oficial
       await processarResposta(rfq.id, supplier.id, novoHistorico, supplier.ownerId, {
         unitPrice: aiResponse.unitPrice,
         minQuantity: aiResponse.minQuantity,
@@ -105,9 +117,8 @@ export const webhookController = {
         validityDays: aiResponse.validityDays
       });
       
-      // DELETA o histórico do banco para não acumular lixo
+      // Limpa a memória para a próxima cotação
       await supplierModel.update(supplier.ownerId, supplier.id, { chatHistory: "" });
-      
       await telegramService.sendMessage(chatId, aiResponse.replyMessage);
 
     } catch (error) {
