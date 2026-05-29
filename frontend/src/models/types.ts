@@ -14,7 +14,7 @@ export interface RFQ {
 export interface Quote {
   id: string; rfqId: string; productId: string; supplierId: string; rawReply: string;
   status: 'sent' | 'answered' | 'error';
-  unitPrice?: number; leadTimeDays?: number; minQty?: number; validityDays?: number;
+  unitPrice?: number; leadTimeDays?: number; minQty?: number; validityDays?: number; createdAt?: string;
 }
 export interface PurchaseOrder {
   id: string; quoteId: string; productId: string; supplierId: string;
