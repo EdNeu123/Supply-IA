@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(env.gemini.apiKey);
 export const iaService = {
   async estruturarCotacao(textoFornecedor: string) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const prompt = `Você extrai dados de uma cotação enviada por um fornecedor em texto livre (pt-BR).
 Responda APENAS com JSON válido, sem markdown, neste formato:
 {
