@@ -48,45 +48,42 @@ export const webhookController = {
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
-      const prompt = `
-        Você é um assistente de suprimentos conversando com um fornecedor.
-        Aqui está o histórico atual da conversa sobre a cotação:
-        """
-        ${novoHistorico}
-        """
-        
-        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
-        
-        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
-        1. Preço unitário
-        2. Quantidade mínima
-        3. Prazo de entrega
-        4. Validade da cotação
-        
-        Instruções:
-        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
-        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
-        
-        Extraia os valores como números (prazos/validades em dias, ex: "terça que vem" = 5).
-        
-        Retorne APENAS um JSON válido, sem formatação markdown:
-        {
-          "isQuote": boolean,
-          "replyMessage": string,
-          "unitPrice": number | null,
-          "minQuantity": number | null,
-          "leadTimeDays": number | null,
-          "validityDays": number | null
-        }
-      `;
+      const prompt = `Você é um assistente de suprimentos.
+Leia TODO o histórico de conversa abaixo para buscar os dados:
+"""
+${novoHistorico}
+"""
 
+Seu objetivo é extrair 4 dados OBRIGATÓRIOS do histórico:
+1. Preço unitário
+2. Quantidade mínima
+3. Prazo de entrega (em dias)
+4. Validade da cotação (em dias)
+
+REGRA 1: Se o fornecedor tiver dúvidas técnicas (ex: marca), responda: "Não exigimos marca específica, envie a melhor opção."
+REGRA 2: Verifique o histórico COMPLETO. Se AINDA FALTAR algum dos 4 dados, 'isQuote' = false. Agradeça e pergunte APENAS pelo dado que falta.
+REGRA 3: Se TODOS os 4 dados já estiverem em alguma parte do histórico, 'isQuote' = true. Responda: "✅ Proposta registrada com sucesso!"
+
+Retorne APENAS um JSON válido. Use null se o dado ainda não foi informado:
+{
+  "isQuote": boolean,
+  "replyMessage": "Sua resposta aqui",
+  "unitPrice": 15.50,
+  "minQuantity": 100,
+  "leadTimeDays": 5,
+  "validityDays": 15
+}`;
+
+      // Usando o modelo correto (2.5-flash) e forçando JSON
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.5-flash",
         contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
       });
 
-      const rawText = response.text.replace(/```json/g, "").replace(/```/g, "").trim();
-      const aiResponse = JSON.parse(rawText);
+      const aiResponse = JSON.parse(response.text?.trim() || "{}");
 
       if (!aiResponse.isQuote) {
         // Salva a interação (pergunta + resposta) na memória temporária do banco
