@@ -32,7 +32,6 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      // Adiciona o "digitando..." para ganhar tempo
       await telegramService.sendChatAction(chatId);
 
       const supplier = await supplierModel.findByTelegramChatId(chatId);
@@ -50,14 +49,15 @@ export const webhookController = {
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
-      // Configuração de data atual para cálculo de prazos
       const hoje = new Date();
       const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
       const infoHoje = `Hoje é ${diasSemana[hoje.getDay()]} (data atual: ${hoje.toLocaleDateString('pt-BR')}).`;
 
       const prompt = `
-        Você é um assistente de suprimentos conversando com um fornecedor.
-        Aqui está o histórico atual da conversa sobre a cotação:
+        Você é um assistente de suprimentos conversando com um fornecedor via chat.
+        Seu objetivo é coletar EXATAMENTE 4 informações sobre a cotação.
+        
+        Histórico da conversa:
         """
         ${novoHistorico}
         """
@@ -65,21 +65,21 @@ export const webhookController = {
         INFORMAÇÕES DE CONTEXTO:
         - ${infoHoje}
         - Prazos relativos (ex: "quinta que vem", "amanhã"): calcule a quantidade de dias a partir de hoje como número inteiro.
-        - "não tem quantidade mínima" ou "qualquer quantia": defina minQuantity como 0.
+        - Expressões como "não tem quantidade mínima" ou "qualquer quantia": defina minQuantity como 0.
         
-        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
+        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda na propriedade "replyMessage": "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
         
-        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
-        1. Preço unitário
-        2. Quantidade mínima
-        3. Prazo de entrega
-        4. Validade da cotação
+        REGRA 2 - AVALIAÇÃO DE STATUS (CRÍTICO):
+        Extraia as 4 variáveis abaixo a partir de TODO o histórico da conversa:
+        1. unitPrice (Preço unitário)
+        2. minQuantity (Quantidade mínima)
+        3. leadTimeDays (Prazo de entrega em dias)
+        4. validityDays (Validade da cotação em dias)
         
-        Instruções:
-        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
-        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
-        
-        CRÍTICO: Se 'isQuote' for true, você DEVE varrer TODO o histórico e preencher TODOS os 4 valores no JSON abaixo. NUNCA retorne null se o fornecedor já informou o dado no passado.
+        - Se QUALQUER UMA dessas 4 variáveis não puder ser extraída e for ficar como null, você DEVE retornar "isQuote": false.
+        - Se "isQuote": false, a sua "replyMessage" deve perguntar de forma amigável APENAS os itens que ainda faltam. NUNCA peça os que já foram informados.
+        - SÓ RETORNE "isQuote": true se VOCÊ CONSEGUIR PREENCHER AS 4 VARIÁVEIS COM NÚMEROS (nenhum null permitido na resposta final).
+        - Se "isQuote": true, "replyMessage" deve ser EXATAMENTE: "✅ Proposta registrada com sucesso no sistema! Obrigado."
 
         Retorne APENAS um JSON válido, sem formatação markdown:
         {
@@ -97,7 +97,6 @@ export const webhookController = {
         contents: prompt,
       });
 
-      // A linha exata do seu código antigo que não dá erro no seu TS
       const rawText = response.text.replace(/```json/g, "").replace(/```/g, "").trim();
       const aiResponse = JSON.parse(rawText);
 
