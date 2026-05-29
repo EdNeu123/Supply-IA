@@ -32,8 +32,6 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
-      await telegramService.sendChatAction(chatId);
-
       const supplier = await supplierModel.findByTelegramChatId(chatId);
       if (!supplier) {
         await telegramService.sendMessage(chatId, "⚠️ Cadastro não encontrado. Acesse o link de convite novamente.");
@@ -46,41 +44,31 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
+      // Puxa a memória da conversa ou começa uma nova
       const historicoAtual = supplier.chatHistory || "";
       const novoHistorico = historicoAtual + `\nFornecedor: ${text}`;
 
-      const hoje = new Date();
-      const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
-      const infoHoje = `Hoje é ${diasSemana[hoje.getDay()]} (data atual: ${hoje.toLocaleDateString('pt-BR')}).`;
-
       const prompt = `
-        Você é um assistente de suprimentos conversando com um fornecedor via chat.
-        Seu objetivo é coletar EXATAMENTE 4 informações sobre a cotação.
-        
-        Histórico da conversa:
+        Você é um assistente de suprimentos conversando com um fornecedor.
+        Aqui está o histórico atual da conversa sobre a cotação:
         """
         ${novoHistorico}
         """
-
-        INFORMAÇÕES DE CONTEXTO:
-        - ${infoHoje}
-        - Prazos relativos (ex: "quinta que vem", "amanhã"): calcule a quantidade de dias a partir de hoje como número inteiro.
-        - Expressões como "não tem quantidade mínima" ou "qualquer quantia": defina minQuantity como 0.
         
-        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda na propriedade "replyMessage": "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
+        REGRA 1 - DÚVIDAS: Se o fornecedor perguntar algo técnico (ex: qual marca?), responda: "Não exigimos marca específica, envie a melhor opção". Nunca devolva a pergunta.
         
-        REGRA 2 - AVALIAÇÃO DE STATUS (CRÍTICO):
-        Extraia as 4 variáveis abaixo a partir de TODO o histórico da conversa:
-        1. unitPrice (Preço unitário)
-        2. minQuantity (Quantidade mínima)
-        3. leadTimeDays (Prazo de entrega em dias)
-        4. validityDays (Validade da cotação em dias)
+        REGRA 2 - DADOS OBRIGATÓRIOS: A cotação só está completa se o HISTÓRICO INTEIRO contiver os 4 itens:
+        1. Preço unitário
+        2. Quantidade mínima
+        3. Prazo de entrega
+        4. Validade da cotação
         
-        - Se QUALQUER UMA dessas 4 variáveis não puder ser extraída e for ficar como null, você DEVE retornar "isQuote": false.
-        - Se "isQuote": false, a sua "replyMessage" deve perguntar de forma amigável APENAS os itens que ainda faltam. NUNCA peça os que já foram informados.
-        - SÓ RETORNE "isQuote": true se VOCÊ CONSEGUIR PREENCHER AS 4 VARIÁVEIS COM NÚMEROS (nenhum null permitido na resposta final).
-        - Se "isQuote": true, "replyMessage" deve ser EXATAMENTE: "✅ Proposta registrada com sucesso no sistema! Obrigado."
-
+        Instruções:
+        - Se AINDA FALTAR algum dos 4 itens: isQuote = false. Agradeça o que foi enviado e pergunte APENAS O QUE FALTA de forma natural. NUNCA peça para enviar tudo de novo numa mensagem só.
+        - Se os 4 itens estiverem presentes: isQuote = true. Responda: "✅ Proposta registrada com sucesso no sistema! Obrigado."
+        
+        Extraia os valores como números (prazos/validades em dias, ex: "terça que vem" = 5).
+        
         Retorne APENAS um JSON válido, sem formatação markdown:
         {
           "isQuote": boolean,
@@ -93,7 +81,7 @@ export const webhookController = {
       `;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
       });
 
@@ -101,6 +89,7 @@ export const webhookController = {
       const aiResponse = JSON.parse(rawText);
 
       if (!aiResponse.isQuote) {
+        // Salva a interação (pergunta + resposta) na memória temporária do banco
         await supplierModel.update(supplier.ownerId, supplier.id, { 
           chatHistory: novoHistorico + `\nAssistente: ${aiResponse.replyMessage}` 
         });
@@ -108,6 +97,7 @@ export const webhookController = {
         return res.status(200).send("OK");
       }
 
+      // Se aprovou, manda o histórico completo pro quoteController
       await processarResposta(rfq.id, supplier.id, novoHistorico, supplier.ownerId, {
         unitPrice: aiResponse.unitPrice,
         minQuantity: aiResponse.minQuantity,
@@ -115,6 +105,7 @@ export const webhookController = {
         validityDays: aiResponse.validityDays
       });
       
+      // DELETA o histórico do banco para não acumular lixo
       await supplierModel.update(supplier.ownerId, supplier.id, { chatHistory: "" });
       
       await telegramService.sendMessage(chatId, aiResponse.replyMessage);

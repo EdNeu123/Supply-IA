@@ -19,17 +19,6 @@ export const telegramService = {
     }
   },
 
-  // NOVO: Função para enviar o status de "digitando"
-  async sendChatAction(chatId: string, action: 'typing' = 'typing') {
-    try {
-      await axios.post(`${API}/sendChatAction`, { chat_id: chatId, action });
-      return { success: true };
-    } catch (error: any) {
-      console.error('Erro Telegram (Chat Action):', error.response?.data || error.message);
-      return { success: false };
-    }
-  },
-
   async enviarRFQ(supplier: any, product: any, rfqId: string) {
     if (!supplier.telegramChatId) return;
     const text = `📦 Cotação solicitada para: *${product.name}*\nQual seu preço, prazo e quantidade mínima?`;
